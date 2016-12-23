@@ -11,7 +11,7 @@ public class BotRunner {
     private static Settings settings;
 
     public static void run() {
-        GoBoard board = BoardFactory.newBoard();
+        Game game = new Game(BoardFactory.newBoard());
         settings = new Settings();
         MoveResolver moveResolver = new MoveResolver(settings);
         int turnNumber = 0;
@@ -36,26 +36,25 @@ public class BotRunner {
                             if (arg[3].equals("Null")) {
                                 continue;
                             }
-                            board = board.playMove(Integer.parseInt(arg[4]), Integer.parseInt(arg[5]));
+                            game.playMove(Integer.parseInt(arg[4]), Integer.parseInt(arg[5])); // no exception
                         } else {
-                            board = board.passMove();
+                            game.passMove();
                         }
                         turnNumber++;
                     }
                     break;
                 case "action":
                     colorChosen = true; // play as black by default
-                    Point point = moveResolver.getMove(board, turnNumber);
-                    if (point == null) {
-                        System.out.println("pass");
-                        board = board.passMove();
-                    } else {
+                    Point point = moveResolver.getMove(game);
+                    try{
                         int x = point.getPosX();
                         int y = point.getPosY();
+                        game.playMove(x, y);
                         System.out.println(String.format("place_move %d %d",x,y));
-                        board = board.playMove(x, y);
+                    } catch (RuntimeException ex) {
+                        game.passMove();
+                        System.out.println("pass");
                     }
-//                    board.print();
                     System.out.flush();
                     turnNumber++;
                     break;

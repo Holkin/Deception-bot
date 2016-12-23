@@ -53,18 +53,22 @@ public class SolidGroup implements Group {
     public Group attach(Point point, GoBoard board) {
         int x = point.getPosX();
         int y = point.getPosY();
-        SolidGroup group = new SolidGroup(point.stone());
+        SolidGroup group = new SolidGroup(color);
+        group.edges.addAll(edges);
+        group.points.addAll(points);
+        Point freePoint = newPoint(x, y, Stone.EMPTY);
+
+        if (this.edges.contains(freePoint) && this.color != point.stone() && (point.stone() != Stone.EMPTY)) {
+            // reduce dame
+            group.edges.remove(freePoint);
+            return group;
+        }
+
         group.points.add(point);
         group.edges.addAll(board.getFreeNeighbours(x,y));
-        Point freePoint = newPoint(x, y, Stone.EMPTY);
         if (this.edges.contains(freePoint) && this.color == point.stone()) {
             // merge with same color
             return merge(group, board);
-        }
-        if (this.edges.contains(freePoint) && this.color != point.stone() && (point.stone() != Stone.EMPTY)) {
-            // reduce dame
-            group.edges.remove(point);
-            return group;
         }
         if (Stone.EMPTY == point.stone()) {
             for (Point p : board.getNeighbours(x,y)) {
@@ -99,5 +103,10 @@ public class SolidGroup implements Group {
     @Override
     public Stone getColor() {
         return color;
+    }
+
+    @Override
+    public String toString() {
+        return String.format("Group(points=%d, edges=%d, x=%d, y=%d, color=%s)", points.size(), edges.size(), points.get(0).getPosX(), points.get(0).getPosY(), color.toString().substring(0,1));
     }
 }

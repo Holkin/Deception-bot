@@ -1,6 +1,7 @@
 package deception;
 
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -10,11 +11,77 @@ import java.util.stream.Collectors;
 import static deception.PlayParam.NO_SECOND_LINE_MOVE_TILL_TURN;
 
 public class MoveResolver {
+    private static final double FACTOR = 10;
+
+    public static class Branch {
+        GoBoard board;
+        Point move;
+        double myScoreDiff;
+        double opScoreDiff;
+//        double totalScoreDiff;
+
+        public Branch(GoBoard board, Point move) {
+            this.board = board;
+            this.move = move;
+        }
+    }
+
     private Settings settings;
     private Random random = new Random();
 
     public MoveResolver(Settings settings) {
         this.settings = settings;
+    }
+
+    public Point getMove(Game game) {
+        List<Branch> branches = initCandidateMoves(game);
+        filterSuicidal(branches);
+        return choseBest(branches);
+    }
+
+    private Point choseBest(List<Branch> branches) {
+        double bestScore = Double.NEGATIVE_INFINITY;
+        Branch best = null;
+        for (Branch branch : branches) {
+            double score = branch.myScoreDiff - branch.opScoreDiff * FACTOR;
+            if (score > bestScore) {
+                bestScore = score;
+                best = branch;
+            }
+        }
+        return best == null ? null : best.move;
+    }
+
+    private void filterSuicidal(List<Branch> branches) {
+        branches.parallelStream()
+                .filter(branch -> branch.myScoreDiff > 0);
+    }
+
+    private List<Branch> initCandidateMoves(Game game) {
+        // TODO change this
+        final double myScoreBefore = Game.countStones(game.isBlackTurn() ? Stone.BLACK : Stone.WHITE, game.getBoard());
+        final double opScoreBefore = Game.countStones(game.isBlackTurn() ? Stone.WHITE : Stone.BLACK, game.getBoard());
+//        final double totalScoreBefore = (game.isBlackTurn() ? 1 : -1) * (Game.countStones(Stone.BLACK, game.getBoard()) - Game.countStones(Stone.WHITE, game.getBoard()));
+
+        return game.getBoard()
+                .candidateMoves()
+                .parallelStream()
+                .map(move -> {
+                    try {
+                        return new Branch(game.getBoard().playMove(move.getPosX(), move.getPosY()), move);
+                    } catch (RuntimeException ex) {
+                        return null;
+                    }
+                })
+                .filter(item -> item != null)
+                .filter(item -> game.getPreviousPositions().get(item.board.hash()) == null) // super ko
+                .map(item -> {
+                    item.myScoreDiff = Game.countStones(game.isBlackTurn() ? Stone.BLACK : Stone.WHITE, item.board) - myScoreBefore;
+                    item.opScoreDiff = Game.countStones(game.isBlackTurn() ? Stone.WHITE : Stone.BLACK, item.board) - opScoreBefore;
+//                    item.totalScoreDiff =(game.isBlackTurn() ? 1 : -1) * (Game.countStones(Stone.BLACK, item.board) - Game.countStones(Stone.WHITE, item.board)) - totalScoreBefore;
+                    return item;
+                })
+                .collect(Collectors.toList());
     }
 
     public Point getMove(GoBoard board, int turnNumber) {
@@ -32,7 +99,7 @@ public class MoveResolver {
         }
         // filter suicide and illegal moves
         candidateMoves = candidateMoves.parallelStream().filter(move -> {
-            try{
+            try {
                 board.playMove(move.getPosX(), move.getPosY());
                 return true;
             } catch (RuntimeException ex) {
@@ -47,21 +114,21 @@ public class MoveResolver {
         Map.Entry<Point, Integer> bestMove = getBestMove(bestMoves);
         candidateMoves.parallelStream()
                 .forEach(move -> {
-                    try{
+                    try {
                         GoBoard nb = board.playMove(move.getPosX(), move.getPosY());
                         for (Group g : nb.groups()) {
                             if (g.isInAtari()) {
                                 if (g.getColor() == settings.myColor) {
                                     return;
-                                }
-                                else {
+                                } else {
                                     if (bestMove.getValue() < g.size()) {
                                         bestMoves.put(move, g.size());
                                     }
                                 }
                             }
                         }
-                    } catch (RuntimeException ex) {}
+                    } catch (RuntimeException ex) {
+                    }
                 });
         return bestMove == null ? null : bestMove.getKey();
 //        return candidateMoves.get(random.nextInt(candidateMoves.size()));
@@ -72,7 +139,7 @@ public class MoveResolver {
         for (Group g : board.groups()) {
             if (g.isInAtari()) {
                 Point p = g.getEdges().iterator().next();
-                try{
+                try {
                     return BoardFactory.newPoint(p.getPosX(), p.getPosY(), settings.myColor);
                 } catch (IllegalMoveException ex) {
                     return null;

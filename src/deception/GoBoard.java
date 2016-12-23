@@ -63,7 +63,8 @@ public class GoBoard {
     }
 
     public GoBoard playMove(int x, int y) {
-        if (get(x, y).stone() != Stone.EMPTY) {
+        Point spot = get(x, y);
+        if (spot.stone() != Stone.EMPTY) {
             return passMove();
 //            throw new IllegalMoveException();
         }
@@ -79,44 +80,79 @@ public class GoBoard {
         Stone opponentColor = isBlackTurn ? Stone.WHITE : Stone.BLACK;
 //        System.out.println("my = "+myColor+" op = "+opponentColor);
         boolean createNewGroup = true;
-        for (Point nearPoint : neighbours) {
-            int nx = nearPoint.getPosX();
-            int ny = nearPoint.getPosY();
-            if (nearPoint.stone() == opponentColor) {
-                // opponent group
-                for (Group opponentGroup : groups) {
-                    if (opponentGroup.getColor() != opponentColor || !opponentGroup.hasPoint(nx,ny)) {
-                        continue;
-                    }
-                    Group updated = opponentGroup.attach(points[x][y], newBoard);
+
+
+        // ==== update groups ====
+        for (Group group : newBoard.groups) {
+            if (group.getEdges().contains(spot)) {
+                boolean isOppositeColor = opponentColor == group.getColor();
+                if (isOppositeColor) {
+                    Group updated = group.attach(points[x][y], newBoard);
                     if (updated.dame() == 0) {
-                        dead.add(opponentGroup);
+                        dead.add(group);
                     } else {
                         temp.add(updated);
-                        outDated.add(opponentGroup);
+                        outDated.add(group);
                     }
                 }
-            } else {
-                // my group
-                for (Group myGroup : groups) {
-                    if (myGroup.getColor() != myColor|| !myGroup.hasPoint(nx,ny)) {
-                        continue;
-                    }
+                else {
                     if (mergeWith == null) {
-                        mergeWith = myGroup.attach(points[x][y], newBoard);
-                        outDated.add(myGroup);
+                        mergeWith = group.attach(points[x][y], newBoard);
+                        outDated.add(group);
                         temp.add(mergeWith);
                     } else {
                         temp.remove(mergeWith);
-                        mergeWith = myGroup.merge(mergeWith, newBoard);
-                        outDated.add(myGroup);
+                        mergeWith = group.merge(mergeWith, newBoard);
+                        outDated.add(group);
                         temp.add(mergeWith);
                     }
                     createNewGroup = false;
                 }
-
             }
         }
+
+
+//        for (Point nearPoint : neighbours) {
+//            int nx = nearPoint.getPosX();
+//            int ny = nearPoint.getPosY();
+//            if (nearPoint.stone() == opponentColor) {
+//                // opponent group
+//                for (Group opponentGroup : groups) {
+//                    if (opponentGroup.getColor() != opponentColor || !opponentGroup.hasPoint(nx,ny)) {
+//                        continue;
+//                    }
+//                    Group updated = opponentGroup.attach(points[x][y], newBoard);
+//                    if (updated.dame() == 0) {
+//                        dead.add(opponentGroup);
+//                    } else {
+//                        temp.add(updated);
+//                        outDated.add(opponentGroup);
+//                    }
+//                }
+//            } else {
+//                // my group
+//                for (Group myGroup : groups) {
+//                    if (myGroup.getColor() != myColor|| !myGroup.hasPoint(nx,ny)) {
+//                        continue;
+//                    }
+//                    if (mergeWith == null) {
+//                        mergeWith = myGroup.attach(points[x][y], newBoard);
+//                        outDated.add(myGroup);
+//                        temp.add(mergeWith);
+//                    } else {
+//                        temp.remove(mergeWith);
+//                        mergeWith = myGroup.merge(mergeWith, newBoard);
+//                        outDated.add(myGroup);
+//                        temp.add(mergeWith);
+//                    }
+//                    createNewGroup = false;
+//                }
+//
+//            }
+//        }
+
+        // ==== update groups end ====
+
         if (createNewGroup) {
             newBoard.groups.add(newGroup(points[x][y], newBoard));
         }
