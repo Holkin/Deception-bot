@@ -14,18 +14,18 @@ public class TestMain {
     public static void main(String args[]) {
         Game game = new Game(BoardFactory.newBoard());
         settings = new Settings();
+        settings.debug = true;
         MoveResolver moveResolver = new MoveResolver(settings);
         int turnNumber = 0;
         int n = 0;
         while (true) {
-            if (n++ > 200) {
+            if (n++ > 500) {
                 System.out.println("ping");
                 break;
             }
             Point point = moveResolver.getMove(game);
             try{
-                int x = point.getPosX();
-                int y = point.getPosY();
+                int x = point.getPosX(), y = point.getPosY();
                 game.playMove(x, y);
                 System.out.println(String.format("place_move %d %d",x,y));
             } catch (RuntimeException ex) {
@@ -36,5 +36,6 @@ public class TestMain {
             System.out.flush();
             turnNumber++;
         }
+        System.out.println(game.getPreviousPositions());
     }
 }

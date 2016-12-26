@@ -1,17 +1,19 @@
 package deception;
 
 
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Random;
 import java.util.stream.Collectors;
 
-import static deception.PlayParam.NO_SECOND_LINE_MOVE_TILL_TURN;
-
 public class MoveResolver {
-    private static final double FACTOR = 10;
+    private static final double KILL_FACTOR = 11;
+    private static final double CREATE_FACTOR = .5;
+    private static final double OP_ATARI_FACTOR = 5;
+    private static final double MY_ATARI_FACTOR = 9;
+    private static final double REDUCED_EYE_FACTOR = 100;
+    private static final double RANDOM_FACTOR = 0.2;
+    private static final double FISRT_LINE_FACTOR = 0.2;
+    private static final double SECOND_LINE_FACTOR = 0.7;
 
     public static class Branch {
         GoBoard board;
@@ -19,10 +21,21 @@ public class MoveResolver {
         double myScoreDiff;
         double opScoreDiff;
 //        double totalScoreDiff;
+        List<Group> myGroupsInAtari;
+        List<Group> opGroupsInAtari;
+        long createdGroups = 0;
+        long killedGroups = 0;
+        boolean reducedPotentialEye = false;
 
         public Branch(GoBoard board, Point move) {
             this.board = board;
             this.move = move;
+        }
+
+        public String toString() {
+            return String.format("(mScDif=%3.2f, opScDif=%3.2f, mAt=%d, opAt=%d, cr=%d, k=%d, red=%s, x=%d, y=%d)",
+                    myScoreDiff, opScoreDiff, myGroupsInAtari.size(), opGroupsInAtari.size(), createdGroups,
+                    killedGroups, reducedPotentialEye, move.getPosX(), move.getPosY());
         }
     }
 
@@ -43,13 +56,28 @@ public class MoveResolver {
         double bestScore = Double.NEGATIVE_INFINITY;
         Branch best = null;
         for (Branch branch : branches) {
-            double score = branch.myScoreDiff - branch.opScoreDiff * FACTOR;
+            double score = random.nextGaussian() * RANDOM_FACTOR;
+            if (branch.move.getHeight() == 0) {
+                score *= FISRT_LINE_FACTOR;
+            } else if (branch.move.getHeight() == 1) {
+                score *= SECOND_LINE_FACTOR;
+            }
+            score += branch.myScoreDiff - branch.opScoreDiff * KILL_FACTOR * branch.killedGroups;
+            score -= branch.myGroupsInAtari.size() * MY_ATARI_FACTOR;
+            score += branch.opGroupsInAtari.size() * OP_ATARI_FACTOR;
+            score -= branch.createdGroups * CREATE_FACTOR;
+            score -= (branch.reducedPotentialEye && branch.killedGroups == 0) ? REDUCED_EYE_FACTOR : 0;
+
             if (score > bestScore) {
                 bestScore = score;
                 best = branch;
+                log(String.format("best=%3.2f, branch=%s", bestScore, best));
             }
         }
-        return best == null ? null : best.move;
+        if (best == null || best.reducedPotentialEye) {
+            return null;
+        }
+        return best.move;
     }
 
     private void filterSuicidal(List<Branch> branches) {
@@ -59,8 +87,12 @@ public class MoveResolver {
 
     private List<Branch> initCandidateMoves(Game game) {
         // TODO change this
-        final double myScoreBefore = Game.countStones(game.isBlackTurn() ? Stone.BLACK : Stone.WHITE, game.getBoard());
-        final double opScoreBefore = Game.countStones(game.isBlackTurn() ? Stone.WHITE : Stone.BLACK, game.getBoard());
+        final Stone myColor = getMyColor(game);
+        final Stone opponentColor = getOpponentColor(game);
+        final double myScoreBefore = Game.countStones(myColor, game.getBoard());
+        final double opScoreBefore = Game.countStones(opponentColor, game.getBoard());
+        final long myGroups = game.getBoard().groups().stream().filter(g -> g.getColor() == myColor).count();
+        final long opGroups = game.getBoard().groups().stream().filter(g -> g.getColor() == opponentColor).count();
 //        final double totalScoreBefore = (game.isBlackTurn() ? 1 : -1) * (Game.countStones(Stone.BLACK, game.getBoard()) - Game.countStones(Stone.WHITE, game.getBoard()));
 
         return game.getBoard()
@@ -68,98 +100,52 @@ public class MoveResolver {
                 .parallelStream()
                 .map(move -> {
                     try {
-                        return new Branch(game.getBoard().playMove(move.getPosX(), move.getPosY()), move);
+                        int x = move.getPosX();
+                        int y = move.getPosY();
+                        Branch branch = new Branch(game.getBoard().playMove(x, y), move);
+                        long myAtariGroups = game.getBoard().getNeighbourGroups(myColor, x, y).stream().filter(g -> g.dame() == 1).count();
+                        branch.reducedPotentialEye = game.getBoard().getNotMyColorNeighbours(x, y).isEmpty() && myAtariGroups > 0;
+                        return branch;
                     } catch (RuntimeException ex) {
+                        log("illegal move");
                         return null;
                     }
                 })
                 .filter(item -> item != null)
                 .filter(item -> game.getPreviousPositions().get(item.board.hash()) == null) // super ko
                 .map(item -> {
-                    item.myScoreDiff = Game.countStones(game.isBlackTurn() ? Stone.BLACK : Stone.WHITE, item.board) - myScoreBefore;
-                    item.opScoreDiff = Game.countStones(game.isBlackTurn() ? Stone.WHITE : Stone.BLACK, item.board) - opScoreBefore;
+                    item.myScoreDiff = Game.countStones(myColor, item.board) - myScoreBefore;
+                    item.opScoreDiff = Game.countStones(opponentColor, item.board) - opScoreBefore;
+                    item.myGroupsInAtari = item.board.groups().stream()
+                            .filter(group -> group.getColor() == myColor && group.isInAtari())
+                            .collect(Collectors.toList());
+                    item.opGroupsInAtari = item.board.groups().stream()
+                            .filter(group -> group.getColor() == opponentColor && group.isInAtari())
+                            .collect(Collectors.toList());
+                    item.createdGroups = myGroups - item.board.groups().stream()
+                            .filter(g -> g.getColor() == myColor)
+                            .count();
+                    item.killedGroups = opGroups - item.board.groups().stream()
+                            .filter(g -> g.getColor() == opponentColor)
+                            .count();
 //                    item.totalScoreDiff =(game.isBlackTurn() ? 1 : -1) * (Game.countStones(Stone.BLACK, item.board) - Game.countStones(Stone.WHITE, item.board)) - totalScoreBefore;
                     return item;
                 })
                 .collect(Collectors.toList());
     }
 
-    public Point getMove(GoBoard board, int turnNumber) {
-        Point point = handleImmediateAtari(board);
-        if (point != null) {
-            return point;
-        }
-        List<Point> allMoves = board.candidateMoves();
-        // filter 2nd line moves
-        List<Point> candidateMoves = allMoves.parallelStream()
-                .filter(move -> move.getHeight() >= 2 || turnNumber > NO_SECOND_LINE_MOVE_TILL_TURN)
-                .collect(Collectors.toList());
-        if (candidateMoves.isEmpty()) {
-            candidateMoves = allMoves;
-        }
-        // filter suicide and illegal moves
-        candidateMoves = candidateMoves.parallelStream().filter(move -> {
-            try {
-                board.playMove(move.getPosX(), move.getPosY());
-                return true;
-            } catch (RuntimeException ex) {
-                return false;
-            }
-        }).collect(Collectors.toList());
-
-        final Map<Point, Integer> bestMoves = new HashMap<>();
-        if (!candidateMoves.isEmpty()) {
-            bestMoves.put(candidateMoves.get(random.nextInt(candidateMoves.size())), 0);
-        }
-        Map.Entry<Point, Integer> bestMove = getBestMove(bestMoves);
-        candidateMoves.parallelStream()
-                .forEach(move -> {
-                    try {
-                        GoBoard nb = board.playMove(move.getPosX(), move.getPosY());
-                        for (Group g : nb.groups()) {
-                            if (g.isInAtari()) {
-                                if (g.getColor() == settings.myColor) {
-                                    return;
-                                } else {
-                                    if (bestMove.getValue() < g.size()) {
-                                        bestMoves.put(move, g.size());
-                                    }
-                                }
-                            }
-                        }
-                    } catch (RuntimeException ex) {
-                    }
-                });
-        return bestMove == null ? null : bestMove.getKey();
-//        return candidateMoves.get(random.nextInt(candidateMoves.size()));
+    private Stone getOpponentColor(Game game) {
+        return game.isBlackTurn() ? Stone.WHITE : Stone.BLACK;
     }
 
-    private Point handleImmediateAtari(GoBoard board) {
-        // TODO biggest atari
-        for (Group g : board.groups()) {
-            if (g.isInAtari()) {
-                Point p = g.getEdges().iterator().next();
-                try {
-                    return BoardFactory.newPoint(p.getPosX(), p.getPosY(), settings.myColor);
-                } catch (IllegalMoveException ex) {
-                    return null;
-                }
-            }
-        }
-        return null;
+    private Stone getMyColor(Game game) {
+        return game.isBlackTurn() ? Stone.BLACK : Stone.WHITE;
     }
 
-    private Map.Entry<Point, Integer> getBestMove(Map<Point, Integer> map) {
-        Map.Entry<Point, Integer> best = null;
-        for (Map.Entry<Point, Integer> entry : map.entrySet()) {
-            if (best == null) {
-                best = entry;
-                continue;
-            }
-            if (best.getValue() < entry.getValue()) {
-                best = entry;
-            }
+    private void log(Object object) {
+        if (settings.debug) {
+            System.out.println(object);
         }
-        return best;
     }
+
 }

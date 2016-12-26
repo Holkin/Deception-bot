@@ -8,7 +8,7 @@ public class Game {
     private double blackScore = 0;
     private double whiteScore = 0;
     private int turnNumber = 0;
-    private HashMap<byte[], Integer> previousPositions;
+    private HashMap<GoBoard.Hash, Integer> previousPositions;
     private boolean isBlackTurn = true;
 
     public Game(GoBoard board) {
@@ -29,14 +29,14 @@ public class Game {
         whiteScore += countStones(Stone.WHITE, updatedBoard) - countStones(Stone.WHITE, this.board);
         koCheck(updatedBoard);
         this.board = updatedBoard;
-        previousPositions.put(updatedBoard.hash(), turnNumber++);
+        previousPositions.put(updatedBoard.hash(), turnNumber);
         passTurn();
     }
 
     public void koCheck(GoBoard newBoard) {
-        byte[] hash = newBoard.hash();
+        GoBoard.Hash hash = newBoard.hash();
         Integer turnWithSuchPosition = previousPositions.get(hash);
-        if (turnWithSuchPosition != null && turnWithSuchPosition == turnNumber - 2) {
+        if (turnWithSuchPosition != null/* && turnWithSuchPosition == turnNumber - 2*/) {
             throw new IllegalMoveException();
         }
     }
@@ -70,7 +70,7 @@ public class Game {
         return turnNumber;
     }
 
-    public HashMap<byte[], Integer> getPreviousPositions() {
+    public HashMap<GoBoard.Hash, Integer> getPreviousPositions() {
         return previousPositions;
     }
 

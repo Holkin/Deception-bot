@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static deception.BoardFactory.newGroup;
 import static deception.BoardFactory.newPoint;
 
 public class SolidGroup implements Group {
@@ -50,44 +51,59 @@ public class SolidGroup implements Group {
     }
 
     @Override
-    public Group attach(Point point, GoBoard board) {
-        int x = point.getPosX();
-        int y = point.getPosY();
-        SolidGroup group = new SolidGroup(color);
-        group.edges.addAll(edges);
-        group.points.addAll(points);
-        Point freePoint = newPoint(x, y, Stone.EMPTY);
+    public Group attach(Point move, GoBoard board) {
+        SolidGroup group = copyGroup();
+        int x = move.getPosX();
+        int y = move.getPosY();
+        Point spot = newPoint(x, y, Stone.EMPTY);
 
-        if (this.edges.contains(freePoint) && this.color != point.stone() && (point.stone() != Stone.EMPTY)) {
+        if (this.edges.contains(spot) && this.color != move.stone() && (move.stone() != Stone.EMPTY)) {
             // reduce dame
-            group.edges.remove(freePoint);
+            group.edges.remove(spot);
             return group;
         }
 
-        group.points.add(point);
-        group.edges.addAll(board.getFreeNeighbours(x,y));
-        if (this.edges.contains(freePoint) && this.color == point.stone()) {
+        if (this.edges.contains(spot) && this.color == move.stone()) {
             // merge with same color
-            return merge(group, board);
+            return group.merge(new SolidGroup(move, board), board, spot);
         }
-        if (Stone.EMPTY == point.stone()) {
+
+//        group.points.add(move);
+//        group.edges.addAll(board.getFreeNeighbours(x,y));
+
+
+        // some points become free
+        if (Stone.EMPTY == move.stone()) {
             for (Point p : board.getNeighbours(x,y)) {
                 if (points.contains(p)){
-                    edges.add(point);
+                    edges.add(move);
                 }
             }
         }
         return this;
     }
 
+    private SolidGroup copyGroup() {
+        SolidGroup group = new SolidGroup(color);
+        group.edges.addAll(edges);
+        group.points.addAll(points);
+        return group;
+    }
+
     @Override
-    public Group merge(Group group, GoBoard board) {
+    public Group merge(Group group, GoBoard board, Point mergePoint) {
+        int x = mergePoint.getPosX();
+        int y = mergePoint.getPosY();
+        Point spot = newPoint(x, y, Stone.EMPTY);
+
         SolidGroup newGroup = new SolidGroup(color);
         newGroup.edges.addAll(group.getEdges());
         newGroup.edges.addAll(edges);
         newGroup.points.addAll(group.getPoints());
         newGroup.points.addAll(points);
-        return this;
+        newGroup.edges.removeAll(points);
+        newGroup.edges.remove(spot);
+        return newGroup;
     }
 
     @Override
@@ -107,6 +123,9 @@ public class SolidGroup implements Group {
 
     @Override
     public String toString() {
+        if (points.isEmpty()) {
+            return super.toString();
+        }
         return String.format("Group(points=%d, edges=%d, x=%d, y=%d, color=%s)", points.size(), edges.size(), points.get(0).getPosX(), points.get(0).getPosY(), color.toString().substring(0,1));
     }
 }

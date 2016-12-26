@@ -49,8 +49,8 @@ public class BotRunner {
                     try{
                         int x = point.getPosX();
                         int y = point.getPosY();
-                        game.playMove(x, y);
                         System.out.println(String.format("place_move %d %d",x,y));
+                        game.playMove(x, y);
                     } catch (RuntimeException ex) {
                         game.passMove();
                         System.out.println("pass");

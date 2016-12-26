@@ -10,7 +10,7 @@ public interface Group {
     boolean isInAtari();
     boolean hasPoint(int x, int y);
     Group attach(Point point, GoBoard board);
-    Group merge(Group group, GoBoard board);
+    Group merge(Group group, GoBoard board, Point mergePoint);
     List<Point> getPoints();
     Set<Point> getEdges();
     Stone getColor();
