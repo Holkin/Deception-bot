@@ -23,7 +23,11 @@ public class TestMain {
                 System.out.println("ping");
                 break;
             }
+            String str = GoBoardUtil.toString(game.getBoard());
             Point point = moveResolver.getMove(game);
+            if (!GoBoardUtil.toString(game.getBoard()).equals(str)) {
+                throw new RuntimeException();
+            }
             try{
                 int x = point.getPosX(), y = point.getPosY();
                 game.playMove(x, y);
@@ -36,6 +40,6 @@ public class TestMain {
             System.out.flush();
             turnNumber++;
         }
-        System.out.println(game.getPreviousPositions());
+//        System.out.println(game.getPreviousPositions());
     }
 }

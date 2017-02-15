@@ -10,11 +10,11 @@ public class GoBoard {
     public static final int BOARD_SIZE = 19;
     private final Point[][] points;
     private boolean isBlackTurn = true;
-    private final Set<Group> groups = new HashSet<>();
+    private final Set<Group> groups;
 
     public GoBoard(Point[][] points, Set<Group> groups) {
         this.points = points;
-        this.groups.addAll(groups);
+        this.groups = groups.stream().map(g -> new SolidGroup((SolidGroup) g)).collect(Collectors.toSet());
     }
 
     private Point get(int x, int y) {

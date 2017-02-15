@@ -24,6 +24,11 @@ public class SolidGroup implements Group {
         points.add(point);
         edges.addAll(board.getFreeNeighbours(point.getPosX(), point.getPosY()));
     }
+    public SolidGroup(SolidGroup prototype) {
+        this.color = prototype.color;
+        points.addAll(prototype.points);
+        edges.addAll(prototype.edges);
+    }
 
     @Override
     public int size() {
